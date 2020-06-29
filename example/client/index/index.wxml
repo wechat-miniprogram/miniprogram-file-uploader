@@ -1,0 +1,43 @@
+<view class="line">
+  <button bindtap="chooseVideo">选择视频</button>
+</view>
+<view class="line">
+  <button bindtap="handlePause">暂停上传</button>
+</view>
+<view class="line">
+  <button bindtap="handleResume">恢复上传</button>
+</view>
+
+<view class="line">
+ 是否计算文件 MD5  
+ <switch 
+  checked="{{useFileHash}}"
+  bindchange="onUseHashChange"
+>
+</switch>
+</view>
+<view class="line">
+  分片大小（MB）
+  <slider
+    class="slider"
+    min="1"
+    max="10"
+    step="1"
+    value="5"
+    show-value
+    bindchange="onChunkSizeChange"
+  >
+  </slider>
+</view>
+<view class="line">
+  上传进度：
+  <progress 
+    percent="{{progress}}" 
+    show-info	
+    border-radius="5" 
+    duration="20"
+    active-mode="forwards" 
+    active
+  >
+  </progress>
+</view>

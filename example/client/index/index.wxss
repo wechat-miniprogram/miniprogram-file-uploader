@@ -1,0 +1,12 @@
+.intro {
+  margin: 30px;
+  text-align: center;
+}
+
+.line {
+  margin: 10px;
+}
+
+slider {
+  margin: 0;
+}
