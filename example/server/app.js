@@ -10,6 +10,8 @@ const glob = require('glob')
 const UPLOAD_DIR = path.resolve(__dirname, 'uploads')
 const TEMP_DIR = path.resolve(__dirname, 'tmp')
 
+fs.ensureDirSync(UPLOAD_DIR)
+fs.ensureDirSync(TEMP_DIR)
 
 app.post('/upload', bodyParser.raw({limit: '10mb'}), function(req, res) {
   const chunk = req.body

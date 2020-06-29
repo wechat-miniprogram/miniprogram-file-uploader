@@ -2,7 +2,7 @@
 
 const say = () => {
   // eslint-disable-next-line no-console
-  console.log('s');
+  console.log('ssd');
 };
 
 export { say };

@@ -4,6 +4,8 @@
   "description": "Uploader library for wechat miniprogram",
   "main": "dist/uploader.js",
   "scripts": {
+    "dev": "npm run server & npx rollup -c -w",
+    "server": "node example/server/app.js",
     "build": "npx rollup -c",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

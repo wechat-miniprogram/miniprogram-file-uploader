@@ -9,9 +9,9 @@ yarn-debug.log*
 yarn-error.log*
 
 node_modules
-example/server/tmp/**
-example/server/uploads/**
-example/server/node_modules
+example/client/lib/**
+example/server/tmp/
+example/server/uploads/
 example/server/node_modules
 example/server/package-lock.json
 
