@@ -1,0 +1,37 @@
+{
+  "name": "miniprogram-uploader",
+  "version": "0.0.1",
+  "description": "Uploader library for wechat miniprogram",
+  "main": "dist/uploader.js",
+  "scripts": {
+    "build": "npx rollup -c",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://git.code.oa.com/sixsixsix/miniprogram-uploader.git"
+  },
+  "keywords": [
+    "miniprogram",
+    "uploader",
+    "resumable upload",
+    "chunk upload",
+    "big file",
+    "upload"
+  ],
+  "author": "sanfordsun",
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^13.0.0",
+    "@rollup/plugin-node-resolve": "^8.1.0",
+    "eslint-config-airbnb-base": "^14.2.0",
+    "eslint-plugin-import": "^2.22.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "rollup": "^2.18.1",
+    "rollup-plugin-eslint": "^7.0.0"
+  },
+  "dependencies": {
+    "spark-md5": "^3.0.1"
+  }
+}
