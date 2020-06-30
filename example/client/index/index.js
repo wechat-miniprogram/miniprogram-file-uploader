@@ -1,6 +1,6 @@
 import Uploader from '../lib/uploader'
 
-const HOST_IP = '10.9.171.33'
+const HOST_IP = '10.9.161.102'
 const MERGE_URL = `http://${HOST_IP}:3000/merge`
 const VERIFY_URL = `http://${HOST_IP}:3000/verify`
 const UPLOAD_URL = `http://${HOST_IP}:3000/upload`

@@ -828,14 +828,15 @@ class Uploader {
     this.chunkSize = this.config.chunkSize;
     this.tempFilePath = this.config.tempFilePath;
     this.totalChunks = Math.ceil(this.size / this.chunkSize);
+    this.chunksIndex = Array.from(Array(this.totalChunks).keys());
     this.identifier = '';
 
-    this.chunksRead = 0;
     this.chunksSend = 0;
     this.maxLoadChunks = Math.floor(this.config.maxMemory / this.chunkSize);
     this.chunkQueue = [];
     this.uploadQueue = [];
     this.pUploadList = [];
+    this.uploadedChunks = [];
 
     this.event();
   }
@@ -860,13 +861,15 @@ class Uploader {
         this.emit('complete');
         return
       } else {
-        this.uploadedChunks = uploadedChunks;
+        this.uploadedChunks = uploadedChunks.sort();
       }
     } else {
       this.identifier = this.generateIdentifier();
     }
 
-    if (this.chunksRead) {
+    // 需要发送的分片序号
+    this.chunksIndex = this.chunksIndex.filter(v => !this.uploadedChunks.includes(v));
+    if (this.chunkQueue.length) {
       const maxConcurrency = this.config.maxConcurrency;
       for (let i = 0; i < maxConcurrency; i++) {
         this.uploadChunk();
@@ -880,18 +883,16 @@ class Uploader {
     const {
       tempFilePath,
       chunkSize,
-      totalChunks,
       maxLoadChunks,
       chunkQueue,
+      chunksIndex,
       size
     } = this;
-    const leftChunks = totalChunks - this.chunksRead;
-    const leftLoadCHunks = maxLoadChunks - chunkQueue.length;
-    const chunks = Math.min(leftChunks, leftLoadCHunks);
+    const chunks = Math.min(chunksIndex.length, maxLoadChunks - chunkQueue.length);
     // 异步读取
     for (let i = 0; i < chunks; i++) {
-      const chunksRead = this.chunksRead;
-      const position = chunksRead * chunkSize;
+      const index = chunksIndex.shift();
+      const position = index * chunkSize;
       const length = Math.min(size - position, chunkSize);
       readFileAsync({
         filePath: tempFilePath,
@@ -901,7 +902,7 @@ class Uploader {
         const chunk = res.data;
         this.chunkQueue.push({
           chunk,
-          index: chunksRead
+          index
         });
 
         this.uploadChunk();
@@ -909,7 +910,6 @@ class Uploader {
       }).catch((e) => {
         this.emit('error', e);
       });
-      this.chunksRead++;
     }
   }
 
@@ -923,6 +923,13 @@ class Uploader {
       chunk,
       index
     } = this.chunkQueue.shift();
+
+    // 跳过已发送的分块
+    if (this.uploadedChunks.includes(index)) {
+      this.uploadChunk();
+      return
+    }
+
     const {
       uploadUrl,
       query,
@@ -948,10 +955,12 @@ class Uploader {
         this.uploadQueue.splice(taskIndex, 1);
         // 尝试继续加载文件
         this.readFileChunk();
-        // 继续发送下一条
+        // 尝试继续发送下一条
         this.uploadChunk();
         // 所有分片发送完毕
-        if (this.chunksSend === this.totalChunks) {
+
+        const uploadedChunks = this.uploadedChunks;
+        if ((this.chunksSend + uploadedChunks.length) === this.totalChunks) {
           this.emit('uploadDone');
         }
       },
@@ -1012,11 +1021,11 @@ class Uploader {
           chunk,
           index: i
         });
-        this.chunksRead++;
       }
       spark.append(chunk);
     }
 
+    this.chunksIndex = [];
     const identifier = spark.end();
     spark.destroy();
     return identifier

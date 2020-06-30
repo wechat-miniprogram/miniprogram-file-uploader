@@ -17,7 +17,6 @@ fs.ensureDirSync(TEMP_DIR)
 app.post('/upload', bodyParser.raw({limit: '10mb'}), function (req, res) {
   const chunk = req.body
   const {identifier, index} = req.query
-  console.log('query', req.query)
   const chunkDir = path.resolve(TEMP_DIR, identifier)
   fs.ensureDirSync(chunkDir)
   fs.writeFileSync(`${chunkDir}/${identifier}-${index}`, chunk)
