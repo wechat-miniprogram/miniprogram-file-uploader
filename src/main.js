@@ -20,29 +20,32 @@ class Uploader {
     this.chunkSize = this.config.chunkSize
     this.tempFilePath = this.config.tempFilePath
     this.totalChunks = Math.ceil(this.size / this.chunkSize)
-    this.chunksIndex = Array.from(Array(this.totalChunks).keys())
-    this.identifier = ''
-
-    this.chunksSend = 0
     this.maxLoadChunks = Math.floor(this.config.maxMemory / this.chunkSize)
-    this.chunkQueue = []
-    this.uploadQueue = []
-    this.pUploadList = []
-    this.uploadedChunks = []
 
+    this._reset()
     this.event()
   }
 
   event() {
+    // step4: 发送合并请求
     this.on('uploadDone', async () => {
       await this.mergeRequest()
+      this.updateProgress(1)
     })
   }
 
   async upload() {
+    // step1: 计算 identifier
     if (this.config.testChunks) {
       this.identifier = await this.computeMD5()
+    } else {
+      this.identifier = this.generateIdentifier()
+    }
 
+    this.updateProgress(0.05)
+
+    // step2: 获取已上传分片
+    if (this.config.testChunks) {
       const {
         needUpload,
         uploadedChunks
@@ -54,13 +57,35 @@ class Uploader {
         return
       } else {
         this.uploadedChunks = uploadedChunks.sort()
+        this.chunksIndex = this.chunksIndex.filter(v => !this.uploadedChunks.includes(v))
       }
-    } else {
-      this.identifier = this.generateIdentifier()
     }
 
-    // 需要发送的分片序号
-    this.chunksIndex = this.chunksIndex.filter(v => !this.uploadedChunks.includes(v))
+    this.updateProgress(0.10)
+
+    // step3: 开始上传
+    this.isUploading = true
+    this._upload()
+  }
+
+  _reset() {
+    this.chunksIndex = Array.from(Array(this.totalChunks).keys())
+    this.identifier = ''
+    this.isUploading = false
+    this.chunksSend = 0
+    this.chunkQueue = []
+    this.uploadTasks = {}
+    this.pUploadList = []
+    this.uploadedChunks = []
+    this.updateProgress(0)
+  }
+
+  updateProgress(progress) {
+    this.progress = progress
+    this.emit('progress', {progress})
+  }
+
+  _upload() {
     if (this.chunkQueue.length) {
       const maxConcurrency = this.config.maxConcurrency
       for (let i = 0; i < maxConcurrency; i++) {
@@ -69,6 +94,26 @@ class Uploader {
     } else {
       this.readFileChunk()
     }
+  }
+
+  pause() {
+    Object.keys(this.uploadTasks)
+      .forEach(index => {
+        this.chunksIndex.push(index)
+        this.uploadTasks[index].abort()
+      })
+    this.uploadTasks = {}
+    this.isUploading = false
+  }
+
+  resume() {
+    this.isUploading = true
+    this._upload()
+  }
+
+  cancel() {
+    this.pause()
+    this._reset()
   }
 
   readFileChunk() {
@@ -106,10 +151,12 @@ class Uploader {
   }
 
   uploadChunk() {
+    // 暂停中
+    if (!this.isUploading) return
     // 没有更多数据了
     if (!this.chunkQueue.length) return
     // 达到最大并发度
-    if (this.uploadQueue.length === this.config.maxConcurrency) return
+    if (Object.keys(this.uploadTasks).length === this.config.maxConcurrency) return
 
     const {
       chunk,
@@ -143,16 +190,19 @@ class Uploader {
       method: 'POST',
       success: () => {
         this.chunksSend++
-        const taskIndex = this.uploadQueue.indexOf(task)
-        this.uploadQueue.splice(taskIndex, 1)
+        delete this.uploadTasks[index]
+
+        const chunsNeedSend = this.totalChunks - this.uploadedChunks.length
+        const progress = (this.progress + 0.9 * (this.chunksSend / chunsNeedSend)).toFixed(2)
+        this.updateProgress(progress)
+
         // 尝试继续加载文件
         this.readFileChunk()
         // 尝试继续发送下一条
         this.uploadChunk()
         // 所有分片发送完毕
 
-        const uploadedChunks = this.uploadedChunks
-        if ((this.chunksSend + uploadedChunks.length) === this.totalChunks) {
+        if (this.chunksSend === chunsNeedSend) {
           this.emit('uploadDone')
         }
       },
@@ -160,7 +210,7 @@ class Uploader {
         this.emit('error', res)
       }
     })
-    this.uploadQueue.push(task)
+    this.uploadTasks[index] = task
   }
 
   emit(event, data) {
@@ -235,7 +285,6 @@ class Uploader {
         fileName
       }
     })
-    // console.log('verifyResp', verifyResp)
     return verifyResp.data
   }
 
@@ -244,7 +293,7 @@ class Uploader {
       mergeUrl,
       fileName
     } = this.config
-    const mergeResp = await requestAsync({
+    await requestAsync({
       url: mergeUrl,
       data: {
         identifier: this.identifier,
@@ -252,8 +301,6 @@ class Uploader {
       }
     })
     this.emit('complete')
-    console.log('mergeResp', mergeResp)
-    return mergeResp.data
   }
 }
 
