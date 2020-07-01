@@ -7,12 +7,18 @@
 <view class="line">
   <button bindtap="handleResume">恢复上传</button>
 </view>
+<view class="line">
+  <button bindtap="handleCancel">取消上传</button>
+</view>
+<view class="line">
+  <button bindtap="handleUpload">重新上传</button>
+</view>
 
 <view class="line">
  是否计算文件 MD5  
  <switch 
-  checked="{{useFileHash}}"
-  bindchange="onUseHashChange"
+  checked="{{testChunks}}"
+  bindchange="onTestChunksChange"
 >
 </switch>
 </view>
@@ -41,3 +47,7 @@
   >
   </progress>
 </view>
+
+<view class="line"> 已上传大小： {{uploadedSize}} kB </view>
+<view class="line"> 平均速度：{{averageSpeed}} kB/s </view>
+<view class="line"> 预计剩余时间： {{timeRemaining}} ms </view>

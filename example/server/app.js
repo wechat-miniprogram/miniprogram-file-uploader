@@ -22,7 +22,6 @@ app.post('/upload', bodyParser.raw({limit: '10mb'}), function (req, res) {
   fs.writeFileSync(`${chunkDir}/${identifier}-${index}`, chunk)
   res.send(
     JSON.stringify({
-      errCode: 0,
       tempFilePath: `${identifier}-${index}`
     })
   )
@@ -62,11 +61,7 @@ app.get('/merge', async function (req, res) {
   fs.renameSync(targetFilePath, `${targetFilePath}.${ext}`)
   fs.removeSync(chunkDir)
 
-  res.send(
-    JSON.stringify({
-      errCode: 0
-    })
-  )
+  res.send()
 })
 
 app.get('/verify', function (req, res) {
@@ -85,7 +80,6 @@ app.get('/verify', function (req, res) {
     const chunkFiles = fs.readdirSync(chunkDir)
     res.send(
       JSON.stringify({
-        errCode: 0,
         needUpload: true,
         uploadedChunks: chunkFiles.map(fileName => fileName.split('-')[1] * 1)
       })

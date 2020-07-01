@@ -830,11 +830,12 @@ class Uploader {
     this.totalChunks = Math.ceil(this.size / this.chunkSize);
     this.maxLoadChunks = Math.floor(this.config.maxMemory / this.chunkSize);
 
-    this._reset();
     this._event();
   }
 
   async upload() {
+    this._reset();
+
     // step1: 计算 identifier
     if (this.config.testChunks) {
       this.identifier = await this.computeMD5();
@@ -850,18 +851,30 @@ class Uploader {
       } = await this.verifyRequest();
 
       // 秒传逻辑
+      // 找不到合成的文件
       if (!needUpload) {
+        this.progress = 100;
+        this.timeRemaining = 0;
+        this.dispatchProgress();
         this.emit('complete');
         return
+      // 分片齐全，但没有合并
+      } else if (uploadedChunks.length === this.totalChunks) {
+        this.progress = 100;
+        this.timeRemaining = 0;
+        this.dispatchProgress();
+        this.emit('uploadDone');
       } else {
+        this.chunksIndexNeedRead = this.chunksIndexNeedRead.filter(v => !uploadedChunks.includes(v));
+        this.chunksIndexNeedSend = this.chunksIndexNeedSend.filter(v => !uploadedChunks.includes(v));
         this.uploadedChunks = uploadedChunks.sort();
-        this.chunksIndex = this.chunksIndex.filter(v => !this.uploadedChunks.includes(v));
-        this.chunksNeedSend = this.chunksIndex.length;
-        this.sizeNeedSend = this.chunksNeedSend * this.chunkSize;
-        if (this.chunksIndex.includes(this.totalChunks - 1)) {
-          this.sizeNeedSend -= this.totalChunks * this.chunkSize - this.size;
-        }
       }
+    }
+
+    this.chunksNeedSend = this.chunksIndexNeedSend.length;
+    this.sizeNeedSend = this.chunksNeedSend * this.chunkSize;
+    if (this.chunksIndexNeedSend.includes(this.totalChunks - 1)) {
+      this.sizeNeedSend -= (this.totalChunks * this.chunkSize - this.size);
     }
 
     // step3: 开始上传
@@ -872,26 +885,28 @@ class Uploader {
   _event() {
     // step4: 发送合并请求
     this.on('uploadDone', async () => {
+      this.isUploading = false;
       await this.mergeRequest();
     });
   }
 
   _reset() {
-    this.chunksIndex = Array.from(Array(this.totalChunks).keys());
+    this.chunksIndexNeedRead = Array.from(Array(this.totalChunks).keys());
+    this.chunksIndexNeedSend = Array.from(Array(this.totalChunks).keys());
     this.chunksNeedSend = this.totalChunks;
     this.sizeNeedSend = this.size;
-    this.progress = 0;
     this.identifier = '';
-    this.isUploading = false;
     this.chunksSend = 0;
     this.chunksQueue = [];
     this.uploadTasks = {};
     this.pUploadList = [];
     this.uploadedChunks = [];
+    this.isUploading = false;
+    this.progress = 0;
     this.uploadedSize = 0;
     this.averageSpeed = 0;
     this.timeRemaining = Number.POSITIVE_INFINITY;
-    this.emit('progress', 0);
+    this.dispatchProgress();
   }
 
   _upload() {
@@ -912,12 +927,17 @@ class Uploader {
     this.uploadedSize += currUploadSize; // 总体上传大小，暂停后累计
     this._uploadedSize += currUploadSize; // 上传大小，暂停后清空
     const time = Date.now() - this.startUploadTime; // 当前耗时
-    this.averageSpeed = parseInt(this._uploadedSize / time, 10); // 平均速度 B/s
+    const averageSpeed = this._uploadedSize / time; // B/ms
     const sizeWaitSend = this.sizeNeedSend - this.uploadedSize; // 剩余需要发送的大小
-    this.timeRemaining = parseInt(sizeWaitSend / this.averageSpeed, 10); // 剩余时间
-    this.progress = (this.uploadedSize / this.sizeNeedSend).toFixed(2) * 1;
+    this.timeRemaining = parseInt(sizeWaitSend / averageSpeed, 10); // 剩余时间
+    this.averageSpeed = parseInt(averageSpeed, 10) * 1000; // 平均速度 B/s
+    this.progress = parseInt(((this.uploadedSize * 100) / this.sizeNeedSend), 10);
+    this.dispatchProgress();
+  }
 
+  dispatchProgress() {
     this.emit('progress', {
+      size: this.size,
       progress: this.progress,
       uploadedSize: this.uploadedSize,
       averageSpeed: this.averageSpeed,
@@ -926,13 +946,13 @@ class Uploader {
   }
 
   pause() {
+    this.isUploading = false;
     Object.keys(this.uploadTasks)
       .forEach(index => {
-        this.chunksIndex.push(index);
+        this.chunksIndexNeedRead.push(index);
         this.uploadTasks[index].abort();
       });
     this.uploadTasks = {};
-    this.isUploading = false;
   }
 
   resume() {
@@ -951,13 +971,13 @@ class Uploader {
       chunkSize,
       maxLoadChunks,
       chunksQueue,
-      chunksIndex,
+      chunksIndexNeedRead,
       size
     } = this;
-    const chunks = Math.min(chunksIndex.length, maxLoadChunks - chunksQueue.length);
+    const chunks = Math.min(chunksIndexNeedRead.length, maxLoadChunks - chunksQueue.length);
     // 异步读取
     for (let i = 0; i < chunks; i++) {
-      const index = chunksIndex.shift();
+      const index = chunksIndexNeedRead.shift();
       const position = index * chunkSize;
       const length = Math.min(size - position, chunkSize);
       readFileAsync({
@@ -971,7 +991,6 @@ class Uploader {
           length,
           index
         });
-
         this.uploadChunk();
         return chunk
       }).catch((e) => {
@@ -1029,7 +1048,6 @@ class Uploader {
         // 尝试继续发送下一条
         this.uploadChunk();
         // 所有分片发送完毕
-
         if (this.chunksSend === this.chunksNeedSend) {
           this.emit('uploadDone');
         }
@@ -1095,8 +1113,7 @@ class Uploader {
       }
       spark.append(chunk);
     }
-
-    this.chunksIndex = [];
+    this.chunksIndexNeedRead = [];
     const identifier = spark.end();
     spark.destroy();
     return identifier
