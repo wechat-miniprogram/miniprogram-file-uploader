@@ -831,15 +831,7 @@ class Uploader {
     this.maxLoadChunks = Math.floor(this.config.maxMemory / this.chunkSize);
 
     this._reset();
-    this.event();
-  }
-
-  event() {
-    // step4: 发送合并请求
-    this.on('uploadDone', async () => {
-      await this.mergeRequest();
-      this.updateProgress(1);
-    });
+    this._event();
   }
 
   async upload() {
@@ -849,8 +841,6 @@ class Uploader {
     } else {
       this.identifier = this.generateIdentifier();
     }
-
-    this.updateProgress(0.05);
 
     // step2: 获取已上传分片
     if (this.config.testChunks) {
@@ -866,35 +856,49 @@ class Uploader {
       } else {
         this.uploadedChunks = uploadedChunks.sort();
         this.chunksIndex = this.chunksIndex.filter(v => !this.uploadedChunks.includes(v));
+        this.chunksNeedSend = this.chunksIndex.length;
+        this.sizeNeedSend = this.chunksNeedSend * this.chunkSize;
+        if (this.chunksIndex.includes(this.totalChunks - 1)) {
+          this.sizeNeedSend -= this.totalChunks * this.chunkSize - this.size;
+        }
       }
     }
-
-    this.updateProgress(0.10);
 
     // step3: 开始上传
     this.isUploading = true;
     this._upload();
   }
 
+  _event() {
+    // step4: 发送合并请求
+    this.on('uploadDone', async () => {
+      await this.mergeRequest();
+    });
+  }
+
   _reset() {
     this.chunksIndex = Array.from(Array(this.totalChunks).keys());
+    this.chunksNeedSend = this.totalChunks;
+    this.sizeNeedSend = this.size;
+    this.progress = 0;
     this.identifier = '';
     this.isUploading = false;
     this.chunksSend = 0;
-    this.chunkQueue = [];
+    this.chunksQueue = [];
     this.uploadTasks = {};
     this.pUploadList = [];
     this.uploadedChunks = [];
-    this.updateProgress(0);
-  }
-
-  updateProgress(progress) {
-    this.progress = progress;
-    this.emit('progress', {progress});
+    this.uploadedSize = 0;
+    this.averageSpeed = 0;
+    this.timeRemaining = Number.POSITIVE_INFINITY;
+    this.emit('progress', 0);
   }
 
   _upload() {
-    if (this.chunkQueue.length) {
+    this.startUploadTime = Date.now();
+    this._uploadedSize = 0;
+
+    if (this.chunksQueue.length) {
       const maxConcurrency = this.config.maxConcurrency;
       for (let i = 0; i < maxConcurrency; i++) {
         this.uploadChunk();
@@ -902,6 +906,23 @@ class Uploader {
     } else {
       this.readFileChunk();
     }
+  }
+
+  updateUploadSize(currUploadSize) {
+    this.uploadedSize += currUploadSize; // 总体上传大小，暂停后累计
+    this._uploadedSize += currUploadSize; // 上传大小，暂停后清空
+    const time = Date.now() - this.startUploadTime; // 当前耗时
+    this.averageSpeed = parseInt(this._uploadedSize / time, 10); // 平均速度 B/s
+    const sizeWaitSend = this.sizeNeedSend - this.uploadedSize; // 剩余需要发送的大小
+    this.timeRemaining = parseInt(sizeWaitSend / this.averageSpeed, 10); // 剩余时间
+    this.progress = (this.uploadedSize / this.sizeNeedSend).toFixed(2) * 1;
+
+    this.emit('progress', {
+      progress: this.progress,
+      uploadedSize: this.uploadedSize,
+      averageSpeed: this.averageSpeed,
+      timeRemaining: this.timeRemaining
+    });
   }
 
   pause() {
@@ -929,11 +950,11 @@ class Uploader {
       tempFilePath,
       chunkSize,
       maxLoadChunks,
-      chunkQueue,
+      chunksQueue,
       chunksIndex,
       size
     } = this;
-    const chunks = Math.min(chunksIndex.length, maxLoadChunks - chunkQueue.length);
+    const chunks = Math.min(chunksIndex.length, maxLoadChunks - chunksQueue.length);
     // 异步读取
     for (let i = 0; i < chunks; i++) {
       const index = chunksIndex.shift();
@@ -945,8 +966,9 @@ class Uploader {
         length
       }).then(res => {
         const chunk = res.data;
-        this.chunkQueue.push({
+        this.chunksQueue.push({
           chunk,
+          length,
           index
         });
 
@@ -962,14 +984,15 @@ class Uploader {
     // 暂停中
     if (!this.isUploading) return
     // 没有更多数据了
-    if (!this.chunkQueue.length) return
+    if (!this.chunksQueue.length) return
     // 达到最大并发度
     if (Object.keys(this.uploadTasks).length === this.config.maxConcurrency) return
 
     const {
       chunk,
-      index
-    } = this.chunkQueue.shift();
+      index,
+      length
+    } = this.chunksQueue.shift();
 
     // 跳过已发送的分块
     if (this.uploadedChunks.includes(index)) {
@@ -999,10 +1022,7 @@ class Uploader {
       success: () => {
         this.chunksSend++;
         delete this.uploadTasks[index];
-
-        const chunsNeedSend = this.totalChunks - this.uploadedChunks.length;
-        const progress = (this.progress + 0.9 * (this.chunksSend / chunsNeedSend)).toFixed(2);
-        this.updateProgress(progress);
+        this.updateUploadSize(length);
 
         // 尝试继续加载文件
         this.readFileChunk();
@@ -1010,7 +1030,7 @@ class Uploader {
         this.uploadChunk();
         // 所有分片发送完毕
 
-        if (this.chunksSend === chunsNeedSend) {
+        if (this.chunksSend === this.chunksNeedSend) {
           this.emit('uploadDone');
         }
       },
@@ -1067,8 +1087,9 @@ class Uploader {
         length
       }).then(res => res.data);
       if (isltMaxMemory) {
-        this.chunkQueue.push({
+        this.chunksQueue.push({
           chunk,
+          length,
           index: i
         });
       }
