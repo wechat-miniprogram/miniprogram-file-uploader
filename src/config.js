@@ -1,6 +1,6 @@
 export default {
   tempFilePath: '',
-  size: 0,
+  totalSize: 0,
   fileName: '',
   verifyUrl: '',
   uploadUrl: '',
@@ -12,8 +12,8 @@ export default {
   query: '',
   header: {},
   testChunks: true,
-  chunkRetryInterval: null,
+  chunkRetryInterval: 0,
   maxChunkRetries: 0,
-  successStatused: [200, 201, 202],
-  permanentErrors: [404, 415, 500, 501]
+  successStatus: [200, 201, 202],
+  failStatus: [404, 415, 500, 501]
 }

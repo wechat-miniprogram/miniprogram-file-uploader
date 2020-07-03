@@ -1,6 +1,6 @@
 import Uploader from '../lib/uploader'
 
-const HOST_IP = '192.168.100.24'
+const HOST_IP = '10.9.171.37'
 const MERGE_URL = `http://${HOST_IP}:3000/merge`
 const VERIFY_URL = `http://${HOST_IP}:3000/verify`
 const UPLOAD_URL = `http://${HOST_IP}:3000/upload`
@@ -36,7 +36,7 @@ Page({
     })
     const uploader = new Uploader({
       tempFilePath,
-      size,
+      totalSize: size,
       fileName: 'demo',
       verifyUrl: VERIFY_URL,
       uploadUrl: UPLOAD_URL,
@@ -57,8 +57,8 @@ Page({
         timeRemaining: res.timeRemaining
       })
     })
-    uploader.on('error', (res) => {
-      console.log('error', res)
+    uploader.on('fail', (res) => {
+      console.log('fail', res)
     })
 
     uploader.upload()

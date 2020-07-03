@@ -17,3 +17,7 @@ export function addParams(url = '', params = {}) {
   const query = Object.keys(params).map(key => `${key}=${params[key]}`).join('&')
   return query ? `${parts[0]}?${query}` : parts[0]
 }
+
+export const awaitWrap = (promise) => promise
+  .then(data => [null, data])
+  .catch(err => [err, null])
