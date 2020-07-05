@@ -68,7 +68,7 @@ Page({
         timeRemaining: res.timeRemaining
       })
     })
-    
+
     uploader.upload()
 
     this.uploader = uploader
@@ -82,7 +82,7 @@ Page({
       timeRemaining: Number.POSITIVE_INFINITY,
     })
   },
-  
+
   handleUpload() {
     this.uploader && this.uploader.upload()
   },

@@ -35,7 +35,7 @@
 	"compileType": "miniprogram",
 	"libVersion": "2.11.3",
 	"appid": "wx407d0fba58912be6",
-	"projectname": "big-file-upload",
+	"projectname": "large-file-upload",
 	"debugOptions": {
 		"hidedInDevtools": []
 	},

@@ -1,3 +1,11 @@
+
+/**
+ * miniprogram-uploader 0.0.1
+ * description: A JavaScript library supports miniprogram to upload large file.
+ * author: sanfordsun
+ * Released under the MIT License.
+ */
+
 var commonjsGlobal = typeof globalThis !== 'undefined' ? globalThis : typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof self !== 'undefined' ? self : {};
 
 function createCommonjsModule(fn, basedir, module) {
