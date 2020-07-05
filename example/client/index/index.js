@@ -1,6 +1,6 @@
 import Uploader from '../lib/uploader'
 
-const HOST_IP = '10.9.171.37'
+const HOST_IP = '192.168.100.24'
 const MERGE_URL = `http://${HOST_IP}:3000/merge`
 const VERIFY_URL = `http://${HOST_IP}:3000/verify`
 const UPLOAD_URL = `http://${HOST_IP}:3000/upload`
@@ -41,7 +41,8 @@ Page({
       verifyUrl: VERIFY_URL,
       uploadUrl: UPLOAD_URL,
       mergeUrl: MERGE_URL,
-      testChunks: this.data.testChunks
+      testChunks: this.data.testChunks,
+      verbose: true
     })
 
     uploader.on('complete', () => {
@@ -49,7 +50,6 @@ Page({
     })
 
     uploader.on('progress', (res) => {
-      console.log('progress', res)
       this.setData({
         progress: res.progress,
         uploadedSize: parseInt(res.uploadedSize / 1024),

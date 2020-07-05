@@ -10,9 +10,9 @@ Logger.useDefaults({
   defaultLevel: Logger.DEBUG,
   formatter(messages) {
     const now = new Date()
-    const time = `${now.getHours}:${now.getMinutes()}:${now.getSeconds()}}`
+    const time = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`
     messages.unshift(time)
-    messages.unshift('[Uploader}]')
+    messages.unshift('[Uploader]')
   }
 })
 
@@ -22,8 +22,12 @@ const miniProgram = wx.getAccountInfoSync()
 const appId = miniProgram.appId
 const MB = 1024 * 1024
 
+Logger.debug = console.log
+
 class Uploader {
   constructor(option = {}) {
+    // if (option.verbose) Logger.setLevel(Logger.INFO)
+    Logger.debug('construct option ', option)
     this.config = Object.assign(config, option)
     this.emitter = new EventEmitter()
     this.totalSize = this.config.totalSize
@@ -38,13 +42,17 @@ class Uploader {
   async upload() {
     this._reset()
 
+    Logger.info('start generateIdentifier')
     // step1: 计算 identifier
     try {
+      Logger.time('[Uploader] generateIdentifier')
       if (this.config.testChunks) {
         this.identifier = await this.computeMD5()
       } else {
         this.identifier = this.generateIdentifier()
       }
+      Logger.timeEnd('[Uploader] generateIdentifier')
+      Logger.debug('generateIdentifier ', this.identifier)
     } catch (error) {
       this.handleFail({
         errCode: 10002,
@@ -52,9 +60,14 @@ class Uploader {
       })
       return
     }
+    Logger.info('generateIdentifier end')
     // step2: 获取已上传分片
-    if (this.config.testChunks) {
+    if (this.config.testChunks && this.config.verifyUrl) {
+      Logger.info('start verify uploaded chunks')
+      Logger.time('[Uploader] verifyRequest')
       const [verifyErr, verifyResp] = await Util.awaitWrap(this.verifyRequest())
+      Logger.timeEnd('[Uploader] verifyRequest')
+      Logger.debug('verifyRequest', verifyErr, verifyResp)
       if (verifyErr) {
         this.handleFail({
           errCode: 20001,
@@ -66,7 +79,7 @@ class Uploader {
         needUpload,
         uploadedChunks
       } = verifyResp.data
-
+      Logger.info('verify uploaded chunks end')
       // 秒传逻辑
       // 找不到合成的文件
       if (!needUpload) {
@@ -95,6 +108,17 @@ class Uploader {
       this.sizeNeedSend -= (this.totalChunks * this.chunkSize - this.totalSize)
     }
 
+    Logger.debug(`
+      start upload
+        uploadedChunks: ${this.uploadedChunks},
+        chunksQueue: ${this.chunksQueue},
+        chunksIndexNeedRead: ${this.chunksIndexNeedRead},
+        chunksNeedSend: ${this.chunksIndexNeedSend},
+        sizeNeedSend: ${this.sizeNeedSend}
+    `)
+
+    Logger.info('start upload chunks')
+    Logger.time('[Uploader] uploadChunks')
     // step3: 开始上传
     this.isUploading = true
     this._upload()
@@ -150,7 +174,7 @@ class Uploader {
 
   handleFail(e) {
     if (this.isFail) return
-
+    Logger.error('upload file fail: ', e)
     this.isFail = true
     this.cancel()
     this.emit('fail', e)
@@ -160,8 +184,15 @@ class Uploader {
   _event() {
     // step4: 发送合并请求
     this.on('uploadDone', async () => {
+      Logger.timeEnd('[Uploader] uploadChunks')
+      Logger.info('upload chunks end')
       this.isUploading = false
-      const [mergeErr] = await Util.awaitWrap(this.mergeRequest())
+      Logger.info('start merge reqeust')
+      Logger.time('[Uploader] mergeRequest')
+      const [mergeErr, mergeResp] = await Util.awaitWrap(this.mergeRequest())
+      Logger.timeEnd('[Uploader] mergeRequest')
+      Logger.info('merge reqeust end')
+      Logger.debug('mergeRequest', mergeErr, mergeResp)
       if (mergeErr) {
         this.handleFail({
           errCode: 20003,
@@ -169,6 +200,7 @@ class Uploader {
         })
         return
       }
+      Logger.info('upload file success')
       this.emit('success')
       this.emit('complete')
     })
@@ -261,6 +293,7 @@ class Uploader {
     } = this
     const chunks = Math.min(chunksIndexNeedRead.length, maxLoadChunks - chunksQueue.length)
     // 异步读取
+    Logger.debug(`readFileChunk chunks: ${chunks}, chunksIndexNeedRead`, this.chunksIndexNeedRead)
     for (let i = 0; i < chunks; i++) {
       const index = chunksIndexNeedRead.shift()
       const position = index * chunkSize
@@ -301,6 +334,7 @@ class Uploader {
       index,
       length
     } = this.chunksQueue.shift()
+
     // 跳过已发送的分块
     if (this.uploadedChunks.includes(index)) {
       this.uploadChunk()
@@ -322,6 +356,8 @@ class Uploader {
       totalSize: this.totalSize,
       ...query
     })
+    Logger.debug(`uploadChunk index: ${index}, lenght ${length}`)
+    Logger.time(`[Uploader] uploadChunk index-${index}`)
     this._requestAsync({
       url,
       data: chunk,
@@ -336,7 +372,8 @@ class Uploader {
       this.chunksSend++
       delete this.uploadTasks[index]
       this.updateUploadSize(length)
-
+      Logger.debug(`uploadChunk success chunksSend: ${this.chunksSend}`)
+      Logger.timeEnd(`[Uploader] uploadChunk index-${index}`)
       // 尝试继续加载文件
       this.readFileChunk()
       // 尝试继续发送下一条
@@ -394,11 +431,18 @@ class Uploader {
       const position = i * sliceSize
       const length = Math.min(size - position, sliceSize)
       // eslint-disable-next-line no-await-in-loop
-      const chunk = await readFileAsync({
+      const [readFileErr, readFileResp] = await Util.awaitWrap(readFileAsync({
         filePath: tempFilePath,
         position,
         length
-      }).then(res => res.data)
+      }))
+
+      if (readFileErr) {
+        spark.destroy()
+        throw (new Error(readFileErr.errMsg))
+      }
+
+      const chunk = readFileResp.data
       if (isltMaxMemory) {
         this.chunksQueue.push({
           chunk,

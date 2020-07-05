@@ -1099,9 +1099,9 @@ logger.useDefaults({
   defaultLevel: logger.DEBUG,
   formatter(messages) {
     const now = new Date();
-    const time = `${now.getHours}:${now.getMinutes()}:${now.getSeconds()}}`;
+    const time = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
     messages.unshift(time);
-    messages.unshift('[Uploader}]');
+    messages.unshift('[Uploader]');
   }
 });
 
@@ -1111,8 +1111,12 @@ const miniProgram = wx.getAccountInfoSync();
 const appId = miniProgram.appId;
 const MB = 1024 * 1024;
 
+logger.debug = console.log;
+
 class Uploader {
   constructor(option = {}) {
+    // if (option.verbose) Logger.setLevel(Logger.INFO)
+    logger.debug('construct option ', option);
     this.config = Object.assign(config, option);
     this.emitter = new EventEmitter();
     this.totalSize = this.config.totalSize;
@@ -1127,13 +1131,17 @@ class Uploader {
   async upload() {
     this._reset();
 
+    logger.info('start generateIdentifier');
     // step1: 计算 identifier
     try {
+      logger.time('[Uploader] generateIdentifier');
       if (this.config.testChunks) {
         this.identifier = await this.computeMD5();
       } else {
         this.identifier = this.generateIdentifier();
       }
+      logger.timeEnd('[Uploader] generateIdentifier');
+      logger.debug('generateIdentifier ', this.identifier);
     } catch (error) {
       this.handleFail({
         errCode: 10002,
@@ -1141,9 +1149,14 @@ class Uploader {
       });
       return
     }
+    logger.info('generateIdentifier end');
     // step2: 获取已上传分片
-    if (this.config.testChunks) {
+    if (this.config.testChunks && this.config.verifyUrl) {
+      logger.info('start verify uploaded chunks');
+      logger.time('[Uploader] verifyRequest');
       const [verifyErr, verifyResp] = await awaitWrap(this.verifyRequest());
+      logger.timeEnd('[Uploader] verifyRequest');
+      logger.debug('verifyRequest', verifyErr, verifyResp);
       if (verifyErr) {
         this.handleFail({
           errCode: 20001,
@@ -1155,7 +1168,7 @@ class Uploader {
         needUpload,
         uploadedChunks
       } = verifyResp.data;
-
+      logger.info('verify uploaded chunks end');
       // 秒传逻辑
       // 找不到合成的文件
       if (!needUpload) {
@@ -1184,6 +1197,17 @@ class Uploader {
       this.sizeNeedSend -= (this.totalChunks * this.chunkSize - this.totalSize);
     }
 
+    logger.debug(`
+      start upload
+        uploadedChunks: ${this.uploadedChunks},
+        chunksQueue: ${this.chunksQueue},
+        chunksIndexNeedRead: ${this.chunksIndexNeedRead},
+        chunksNeedSend: ${this.chunksIndexNeedSend},
+        sizeNeedSend: ${this.sizeNeedSend}
+    `);
+
+    logger.info('start upload chunks');
+    logger.time('[Uploader] uploadChunks');
     // step3: 开始上传
     this.isUploading = true;
     this._upload();
@@ -1239,7 +1263,7 @@ class Uploader {
 
   handleFail(e) {
     if (this.isFail) return
-
+    logger.error('upload file fail: ', e);
     this.isFail = true;
     this.cancel();
     this.emit('fail', e);
@@ -1249,8 +1273,15 @@ class Uploader {
   _event() {
     // step4: 发送合并请求
     this.on('uploadDone', async () => {
+      logger.timeEnd('[Uploader] uploadChunks');
+      logger.info('upload chunks end');
       this.isUploading = false;
-      const [mergeErr] = await awaitWrap(this.mergeRequest());
+      logger.info('start merge reqeust');
+      logger.time('[Uploader] mergeRequest');
+      const [mergeErr, mergeResp] = await awaitWrap(this.mergeRequest());
+      logger.timeEnd('[Uploader] mergeRequest');
+      logger.info('merge reqeust end');
+      logger.debug('mergeRequest', mergeErr, mergeResp);
       if (mergeErr) {
         this.handleFail({
           errCode: 20003,
@@ -1258,6 +1289,7 @@ class Uploader {
         });
         return
       }
+      logger.info('upload file success');
       this.emit('success');
       this.emit('complete');
     });
@@ -1350,6 +1382,7 @@ class Uploader {
     } = this;
     const chunks = Math.min(chunksIndexNeedRead.length, maxLoadChunks - chunksQueue.length);
     // 异步读取
+    logger.debug(`readFileChunk chunks: ${chunks}, chunksIndexNeedRead`, this.chunksIndexNeedRead);
     for (let i = 0; i < chunks; i++) {
       const index = chunksIndexNeedRead.shift();
       const position = index * chunkSize;
@@ -1390,6 +1423,7 @@ class Uploader {
       index,
       length
     } = this.chunksQueue.shift();
+
     // 跳过已发送的分块
     if (this.uploadedChunks.includes(index)) {
       this.uploadChunk();
@@ -1411,6 +1445,8 @@ class Uploader {
       totalSize: this.totalSize,
       ...query
     });
+    logger.debug(`uploadChunk index: ${index}, lenght ${length}`);
+    logger.time(`[Uploader] uploadChunk index-${index}`);
     this._requestAsync({
       url,
       data: chunk,
@@ -1425,7 +1461,8 @@ class Uploader {
       this.chunksSend++;
       delete this.uploadTasks[index];
       this.updateUploadSize(length);
-
+      logger.debug(`uploadChunk success chunksSend: ${this.chunksSend}`);
+      logger.timeEnd(`[Uploader] uploadChunk index-${index}`);
       // 尝试继续加载文件
       this.readFileChunk();
       // 尝试继续发送下一条
@@ -1483,11 +1520,18 @@ class Uploader {
       const position = i * sliceSize;
       const length = Math.min(size - position, sliceSize);
       // eslint-disable-next-line no-await-in-loop
-      const chunk = await readFileAsync({
+      const [readFileErr, readFileResp] = await awaitWrap(readFileAsync({
         filePath: tempFilePath,
         position,
         length
-      }).then(res => res.data);
+      }));
+
+      if (readFileErr) {
+        spark.destroy();
+        throw (new Error(readFileErr.errMsg))
+      }
+
+      const chunk = readFileResp.data;
       if (isltMaxMemory) {
         this.chunksQueue.push({
           chunk,
