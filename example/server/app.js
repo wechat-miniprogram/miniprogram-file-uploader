@@ -17,6 +17,7 @@ fs.ensureDirSync(TEMP_DIR)
 app.post('/upload', bodyParser.raw({limit: '10mb'}), function (req, res) {
   const chunk = req.body
   const {identifier, index} = req.query
+  console.log(`identifier ${identifier}, receive chunk index-${index}`)
   const chunkDir = path.resolve(TEMP_DIR, identifier)
   fs.ensureDirSync(chunkDir)
   fs.writeFileSync(`${chunkDir}/${identifier}-${index}`, chunk)
@@ -49,6 +50,7 @@ const mergeFiles = (chunkFilePaths, writeStream) => {
 
 app.get('/merge', async function (req, res) {
   const {identifier} = req.query
+  console.log(`identifier ${identifier}, merge`)
   const chunkDir = path.resolve(TEMP_DIR, identifier)
   const chunkFiles = fs.readdirSync(chunkDir)
   chunkFiles.sort((a, b) => a.split('-')[1] - b.split('-')[1])
@@ -66,6 +68,7 @@ app.get('/merge', async function (req, res) {
 
 app.get('/verify', function (req, res) {
   const {identifier} = req.query
+  console.log(`identifier ${identifier}, verify`)
   const matchs = glob.sync(`${identifier}.*`, {cwd: UPLOAD_DIR})
   if (matchs.length) {
     res.send(

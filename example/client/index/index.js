@@ -1,12 +1,12 @@
 import Uploader from '../lib/uploader'
 
+// 使用测试机的IP地址，在工具设置中忽略域名校验
 const HOST_IP = '192.168.100.24'
 const MERGE_URL = `http://${HOST_IP}:3000/merge`
 const VERIFY_URL = `http://${HOST_IP}:3000/verify`
 const UPLOAD_URL = `http://${HOST_IP}:3000/upload`
 
 const MB = 1024 * 1024
-
 Page({
   data: {
     progress: 0,
@@ -44,9 +44,20 @@ Page({
       testChunks: this.data.testChunks,
       verbose: true
     })
+    uploader.on('retry', (res) => {
+      console.log('retry', res.url)
+    })
 
     uploader.on('complete', () => {
       console.log('upload complete')
+    })
+
+    uploader.on('success', () => {
+      console.log('upload success')
+    })
+
+    uploader.on('fail', (res) => {
+      console.log('fail', res)
     })
 
     uploader.on('progress', (res) => {
@@ -57,10 +68,7 @@ Page({
         timeRemaining: res.timeRemaining
       })
     })
-    uploader.on('fail', (res) => {
-      console.log('fail', res)
-    })
-
+    
     uploader.upload()
 
     this.uploader = uploader
@@ -76,18 +84,18 @@ Page({
   },
   
   handleUpload() {
-    this.uploader.upload()
+    this.uploader && this.uploader.upload()
   },
 
   handlePause() {
-    this.uploader.pause()
+    this.uploader && this.uploader.pause()
   },
 
   handleResume() {
-    this.uploader.resume()
+    this.uploader && this.uploader.resume()
   },
 
   handleCancel() {
-    this.uploader.cancel()
+    this.uploader && this.uploader.cancel()
   }
 })

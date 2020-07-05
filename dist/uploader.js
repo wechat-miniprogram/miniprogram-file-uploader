@@ -1027,10 +1027,12 @@ var config = {
   query: '',
   header: {},
   testChunks: true,
-  chunkRetryInterval: 0,
-  maxChunkRetries: 0,
+  chunkRetryInterval: 200,
+  maxChunkRetries: 2,
+  timeout: 10000,
   successStatus: [200, 201, 202],
-  failStatus: [404, 415, 500, 501]
+  failStatus: [404, 415, 500, 501],
+  verbose: false
 };
 
 class EventEmitter {
@@ -1093,10 +1095,8 @@ const awaitWrap = (promise) => promise
   .then(data => [null, data])
   .catch(err => [err, null]);
 
-/* eslint-disable no-console */
-
 logger.useDefaults({
-  defaultLevel: logger.DEBUG,
+  defaultLevel: logger.OFF,
   formatter(messages) {
     const now = new Date();
     const time = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
@@ -1111,11 +1111,9 @@ const miniProgram = wx.getAccountInfoSync();
 const appId = miniProgram.appId;
 const MB = 1024 * 1024;
 
-logger.debug = console.log;
-
 class Uploader {
   constructor(option = {}) {
-    // if (option.verbose) Logger.setLevel(Logger.INFO)
+    if (option.verbose) logger.setLevel(logger.INFO);
     logger.debug('construct option ', option);
     this.config = Object.assign(config, option);
     this.emitter = new EventEmitter();
@@ -1124,7 +1122,6 @@ class Uploader {
     this.tempFilePath = this.config.tempFilePath;
     this.totalChunks = Math.ceil(this.totalSize / this.chunkSize);
     this.maxLoadChunks = Math.floor(this.config.maxMemory / this.chunkSize);
-
     this._event();
   }
 
@@ -1226,6 +1223,7 @@ class Uploader {
       const doRequest = () => {
         const task = wx.request({
           ...args,
+          timeout: this.config.timeout,
           success: (res) => {
             const statusCode = res.statusCode;
 
@@ -1235,11 +1233,12 @@ class Uploader {
             // 标示失败的返回码
             } else if (failStatus.includes(statusCode)) {
               reject(res);
-            }
-
-            // 重试
-            if (retries > 0) {
+            } else if (retries > 0) {
               setTimeout(() => {
+                this.emit('retry', {
+                  statusCode,
+                  url: args.url
+                });
                 --retries;
                 doRequest();
               }, chunkRetryInterval);
@@ -1332,21 +1331,24 @@ class Uploader {
   }
 
   pause() {
+    logger.info('** pause **');
     this.isUploading = false;
-    Object.keys(this.uploadTasks)
-      .forEach(index => {
-        this.chunksIndexNeedRead.push(index);
-        this.uploadTasks[index].abort();
-      });
+    const abortIndex = Object.keys(this.uploadTasks).map(v => v * 1);
+    abortIndex.forEach(index => {
+      this.chunksIndexNeedRead.push(index);
+      this.uploadTasks[index].abort();
+    });
     this.uploadTasks = {};
   }
 
   resume() {
+    logger.info('** resume **');
     this.isUploading = true;
     this._upload();
   }
 
   cancel() {
+    logger.info('** cancel **');
     this.pause();
     this._reset();
   }
@@ -1388,6 +1390,7 @@ class Uploader {
       const position = index * chunkSize;
       const length = Math.min(totalSize - position, chunkSize);
       if (this.isFail) break
+
       readFileAsync({
         filePath: tempFilePath,
         position,
@@ -1429,7 +1432,6 @@ class Uploader {
       this.uploadChunk();
       return
     }
-
     const {
       uploadUrl,
       query,
@@ -1473,10 +1475,14 @@ class Uploader {
       }
       return null
     }).catch(res => {
-      this.handleFail({
-        errCode: 20002,
-        errMsg: res.errMsg
-      });
+      if (res.errMsg.includes('request:fail abort')) {
+        logger.info(`chunk index-${index} will be aborted`);
+      } else {
+        this.handleFail({
+          errCode: 20002,
+          errMsg: res.errMsg
+        });
+      }
     });
   }
 
@@ -1507,18 +1513,18 @@ class Uploader {
   async computeMD5() {
     const {
       tempFilePath,
-      size,
+      totalSize,
       chunkSize
     } = this;
 
     // 文件比内存限制小时，保存分片
-    const isltMaxMemory = size < this.config.maxMemory;
+    const isltMaxMemory = totalSize < this.config.maxMemory;
     const sliceSize = isltMaxMemory ? chunkSize : 10 * MB;
-    const sliceNum = Math.ceil(size / sliceSize);
+    const sliceNum = Math.ceil(totalSize / sliceSize);
     const spark = new sparkMd5.ArrayBuffer();
     for (let i = 0; i < sliceNum; i++) {
       const position = i * sliceSize;
-      const length = Math.min(size - position, sliceSize);
+      const length = Math.min(totalSize - position, sliceSize);
       // eslint-disable-next-line no-await-in-loop
       const [readFileErr, readFileResp] = await awaitWrap(readFileAsync({
         filePath: tempFilePath,

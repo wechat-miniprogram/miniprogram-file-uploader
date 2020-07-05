@@ -12,8 +12,10 @@ export default {
   query: '',
   header: {},
   testChunks: true,
-  chunkRetryInterval: 0,
-  maxChunkRetries: 0,
+  chunkRetryInterval: 200,
+  maxChunkRetries: 2,
+  timeout: 10000,
   successStatus: [200, 201, 202],
-  failStatus: [404, 415, 500, 501]
+  failStatus: [404, 415, 500, 501],
+  verbose: false
 }
