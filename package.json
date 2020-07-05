@@ -1,6 +1,6 @@
 {
   "name": "miniprogram-uploader",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "Uploader library for wechat miniprogram",
   "main": "dist/uploader.js",
   "scripts": {

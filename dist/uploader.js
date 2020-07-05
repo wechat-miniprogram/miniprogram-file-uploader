@@ -1,6 +1,6 @@
 
 /**
- * miniprogram-uploader 0.0.1
+ * miniprogram-uploader 1.0.0
  * description: A JavaScript library supports miniprogram to upload large file.
  * author: sanfordsun
  * Released under the MIT License.
@@ -1034,9 +1034,9 @@ var config = {
   maxMemory: 100 * 1024 * 1024,
   query: '',
   header: {},
-  testChunks: true,
-  chunkRetryInterval: 200,
-  maxChunkRetries: 2,
+  testChunks: false,
+  chunkRetryInterval: 0,
+  maxChunkRetries: 0,
   timeout: 10000,
   successStatus: [200, 201, 202],
   failStatus: [404, 415, 500, 501],
@@ -1103,6 +1103,32 @@ const awaitWrap = (promise) => promise
   .then(data => [null, data])
   .catch(err => [err, null]);
 
+const compareVersion = (v1, v2) => {
+  v1 = v1.split('.');
+  v2 = v2.split('.');
+  const len = Math.max(v1.length, v2.length);
+
+  while (v1.length < len) {
+    v1.push('0');
+  }
+  while (v2.length < len) {
+    v2.push('0');
+  }
+
+  for (let i = 0; i < len; i++) {
+    const num1 = parseInt(v1[i], 10);
+    const num2 = parseInt(v2[i], 10);
+
+    if (num1 > num2) {
+      return 1
+    } else if (num1 < num2) {
+      return -1
+    }
+  }
+
+  return 0
+};
+
 logger.useDefaults({
   defaultLevel: logger.OFF,
   formatter(messages) {
@@ -1116,6 +1142,7 @@ logger.useDefaults({
 const fileManager = wx.getFileSystemManager();
 const readFileAsync = promisify(fileManager.readFile);
 const miniProgram = wx.getAccountInfoSync();
+const systemInfo = wx.getSystemInfoSync();
 const appId = miniProgram.appId;
 const MB = 1024 * 1024;
 
@@ -1131,6 +1158,11 @@ class Uploader {
     this.totalChunks = Math.ceil(this.totalSize / this.chunkSize);
     this.maxLoadChunks = Math.floor(this.config.maxMemory / this.chunkSize);
     this._event();
+  }
+
+  static isSupport() {
+    const version = systemInfo.SDKVersion;
+    return compareVersion(version, '2.10.0') >= 0
   }
 
   async upload() {
@@ -1171,7 +1203,7 @@ class Uploader {
       }
       const {
         needUpload,
-        uploadedChunks
+        uploadedChunks,
       } = verifyResp.data;
       logger.info('verify uploaded chunks end');
       // 秒传逻辑
@@ -1180,7 +1212,14 @@ class Uploader {
         this.progress = 100;
         this.timeRemaining = 0;
         this.dispatchProgress();
-        this.emit('complete');
+        this.emit('success', {
+          errCode: 0,
+          ...verifyResp.data
+        });
+        this.emit('complete', {
+          errCode: 0,
+          ...verifyResp.data
+        });
         return
       // 分片齐全，但没有合并
       } else if (uploadedChunks.length === this.totalChunks) {
@@ -1274,7 +1313,7 @@ class Uploader {
     this.isFail = true;
     this.cancel();
     this.emit('fail', e);
-    this.emit('complete');
+    this.emit('complete', e);
   }
 
   _event() {
@@ -1297,8 +1336,14 @@ class Uploader {
         return
       }
       logger.info('upload file success');
-      this.emit('success');
-      this.emit('complete');
+      this.emit('success', {
+        errCode: 0,
+        ...mergeResp.data
+      });
+      this.emit('complete', {
+        errCode: 0,
+        ...mergeResp.data
+      });
     });
   }
 
@@ -1447,13 +1492,13 @@ class Uploader {
     } = this.config;
     const identifier = this.identifier;
     const url = addParams(uploadUrl, {
+      ...query,
       identifier,
       index,
       chunkSize: length,
       fileName: this.config.fileName,
       totalChunks: this.totalChunks,
-      totalSize: this.totalSize,
-      ...query
+      totalSize: this.totalSize
     });
     logger.debug(`uploadChunk index: ${index}, lenght ${length}`);
     logger.time(`[Uploader] uploadChunk index-${index}`);

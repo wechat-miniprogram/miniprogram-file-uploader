@@ -18,6 +18,7 @@ Logger.useDefaults({
 const fileManager = wx.getFileSystemManager()
 const readFileAsync = Util.promisify(fileManager.readFile)
 const miniProgram = wx.getAccountInfoSync()
+const systemInfo = wx.getSystemInfoSync()
 const appId = miniProgram.appId
 const MB = 1024 * 1024
 
@@ -33,6 +34,11 @@ class Uploader {
     this.totalChunks = Math.ceil(this.totalSize / this.chunkSize)
     this.maxLoadChunks = Math.floor(this.config.maxMemory / this.chunkSize)
     this._event()
+  }
+
+  static isSupport() {
+    const version = systemInfo.SDKVersion
+    return Util.compareVersion(version, '2.10.0') >= 0
   }
 
   async upload() {
@@ -73,7 +79,7 @@ class Uploader {
       }
       const {
         needUpload,
-        uploadedChunks
+        uploadedChunks,
       } = verifyResp.data
       Logger.info('verify uploaded chunks end')
       // 秒传逻辑
@@ -82,7 +88,14 @@ class Uploader {
         this.progress = 100
         this.timeRemaining = 0
         this.dispatchProgress()
-        this.emit('complete')
+        this.emit('success', {
+          errCode: 0,
+          ...verifyResp.data
+        })
+        this.emit('complete', {
+          errCode: 0,
+          ...verifyResp.data
+        })
         return
       // 分片齐全，但没有合并
       } else if (uploadedChunks.length === this.totalChunks) {
@@ -176,7 +189,7 @@ class Uploader {
     this.isFail = true
     this.cancel()
     this.emit('fail', e)
-    this.emit('complete')
+    this.emit('complete', e)
   }
 
   _event() {
@@ -199,8 +212,14 @@ class Uploader {
         return
       }
       Logger.info('upload file success')
-      this.emit('success')
-      this.emit('complete')
+      this.emit('success', {
+        errCode: 0,
+        ...mergeResp.data
+      })
+      this.emit('complete', {
+        errCode: 0,
+        ...mergeResp.data
+      })
     })
   }
 
@@ -349,13 +368,13 @@ class Uploader {
     } = this.config
     const identifier = this.identifier
     const url = Util.addParams(uploadUrl, {
+      ...query,
       identifier,
       index,
       chunkSize: length,
       fileName: this.config.fileName,
       totalChunks: this.totalChunks,
-      totalSize: this.totalSize,
-      ...query
+      totalSize: this.totalSize
     })
     Logger.debug(`uploadChunk index: ${index}, lenght ${length}`)
     Logger.time(`[Uploader] uploadChunk index-${index}`)

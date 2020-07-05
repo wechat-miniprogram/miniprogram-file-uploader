@@ -11,6 +11,8 @@ const glob = require('glob')
 const UPLOAD_DIR = path.resolve(__dirname, 'uploads')
 const TEMP_DIR = path.resolve(__dirname, 'tmp')
 
+app.use('/public', express.static('uploads'))
+
 fs.ensureDirSync(UPLOAD_DIR)
 fs.ensureDirSync(TEMP_DIR)
 
@@ -56,14 +58,18 @@ app.get('/merge', async function (req, res) {
   chunkFiles.sort((a, b) => a.split('-')[1] - b.split('-')[1])
   const chunkFilePaths = chunkFiles.map(fileName => path.resolve(chunkDir, fileName))
 
-  const targetFilePath = path.resolve(UPLOAD_DIR, `${identifier}`)
+  const targetFilePath = path.resolve(UPLOAD_DIR, identifier)
   const writeStream = fs.createWriteStream(targetFilePath)
   await mergeFiles(chunkFilePaths, writeStream)
   const {ext} = await FileType.fromFile(targetFilePath)
   fs.renameSync(targetFilePath, `${targetFilePath}.${ext}`)
   fs.removeSync(chunkDir)
 
-  res.send()
+  res.send(
+    JSON.stringify({
+      url: `${targetFilePath}.${ext}`
+    })
+  )
 })
 
 app.get('/verify', function (req, res) {
@@ -73,8 +79,8 @@ app.get('/verify', function (req, res) {
   if (matchs.length) {
     res.send(
       JSON.stringify({
-        errCode: 0,
-        needUpload: false
+        needUpload: false,
+        url: path.resolve(UPLOAD_DIR, matchs[0])
       })
     )
   } else {

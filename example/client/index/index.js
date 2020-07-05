@@ -1,4 +1,5 @@
 import Uploader from '../lib/uploader'
+// import Uploader from 'miniprogram-uploader'
 
 // 使用测试机的IP地址，在工具设置中忽略域名校验
 const HOST_IP = '192.168.100.24'
@@ -34,6 +35,15 @@ Page({
       sourceType: ['album'],
       compressed: false
     })
+
+    if (!Uploader.isSupport()) {
+      wx.showToast({
+        title: '分片上传在 2.10.0 版本以上支持',
+        icon: 'none',
+        duration: 3000
+      })
+      return
+    }
     const uploader = new Uploader({
       tempFilePath,
       totalSize: size,
@@ -48,23 +58,23 @@ Page({
       console.log('retry', res.url)
     })
 
-    uploader.on('complete', () => {
-      console.log('upload complete')
+    uploader.on('complete', (res) => {
+      console.log('upload complete', res)
     })
 
-    uploader.on('success', () => {
-      console.log('upload success')
+    uploader.on('success', (res) => {
+      console.log('upload success', res)
     })
 
     uploader.on('fail', (res) => {
-      console.log('fail', res)
+      console.log('upload fail', res)
     })
 
     uploader.on('progress', (res) => {
       this.setData({
         progress: res.progress,
         uploadedSize: parseInt(res.uploadedSize / 1024),
-        averageSpeed: parseInt(res.averageSpeed / 1000),
+        averageSpeed: parseInt(res.averageSpeed / 1024),
         timeRemaining: res.timeRemaining
       })
     })
