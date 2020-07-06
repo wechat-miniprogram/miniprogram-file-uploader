@@ -146,6 +146,7 @@ const uploader = new Uploader(option)
 | uploadUrl          | 是   | String  | 接收分块接口                                                                       |
 | mergeUrl           | 是   | String  | 合并分块接口                                                                       |
 | maxConcurrency     | 否   | Number  | 并发上传数，默认 5，最大不超过 10                                                  |
+| generateIdentifier | 否   | Function | 可覆盖默认的生成文件唯一标识的函数，需返回 identifier                                |
 | chunkSize          | 否   | Number  | 分块大小，默认 5 * 1024 * 1204 B                                                   |
 | maxMemory          | 否   | Number  | 加载文件最大占用的内存，默认 100 * 1024 * 1024 B，内存占用过大时可能导致小程序闪退 |
 | query              | 否   | Object  | 上传分块时可添加自定义的参数                                                       |
