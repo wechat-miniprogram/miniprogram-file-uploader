@@ -11,6 +11,7 @@ export default {
   maxMemory: 100 * 1024 * 1024,
   query: '',
   header: {},
+  mergeHeader: {},
   testChunks: false,
   chunkRetryInterval: 0,
   maxChunkRetries: 0,
