@@ -500,10 +500,12 @@ class Uploader {
   async mergeRequest() {
     const {
       mergeUrl,
+      mergeHeader,
       fileName
     } = this.config
     const mergeResp = await this._requestAsync({
       url: mergeUrl,
+      header: mergeHeader,
       data: {
         fileName,
         identifier: this.identifier
