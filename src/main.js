@@ -207,7 +207,7 @@ class Uploader {
       if (mergeErr) {
         this.handleFail({
           errCode: 20003,
-          errrMsg: mergeErr.errMsg
+          errMsg: mergeErr.errMsg
         })
         return
       }
