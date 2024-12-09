@@ -16,3 +16,4 @@ example/server/node_modules
 example/server/package-lock.json
 
 coverage
+dist

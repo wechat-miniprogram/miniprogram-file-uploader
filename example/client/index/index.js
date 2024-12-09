@@ -2,7 +2,7 @@ import Uploader from '../lib/uploader'
 // import Uploader from 'miniprogram-uploader'
 
 // 使用测试机的IP地址，在工具设置中忽略域名校验
-const HOST_IP = '192.168.100.24'
+const HOST_IP = 'your ip address'
 const MERGE_URL = `http://${HOST_IP}:3000/merge`
 const VERIFY_URL = `http://${HOST_IP}:3000/verify`
 const UPLOAD_URL = `http://${HOST_IP}:3000/upload`
